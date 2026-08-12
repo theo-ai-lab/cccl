@@ -20,6 +20,8 @@
 #  pragma system_header
 #endif // no system header
 
+#include <cuda/std/__concepts/can_reference.h>
+
 #include <cuda/std/__cccl/prologue.h>
 
 _CCCL_BEGIN_NAMESPACE_CUDA_STD
@@ -31,13 +33,19 @@ using add_lvalue_reference_t _CCCL_NODEBUG_ALIAS = _CCCL_BUILTIN_ADD_LVALUE_REFE
 
 #else // ^^^ _CCCL_BUILTIN_ADD_LVALUE_REFERENCE ^^^ / vvv !_CCCL_BUILTIN_ADD_LVALUE_REFERENCE vvv
 
+template <class _Tp, bool = __can_reference<_Tp>>
+struct __add_lvalue_reference_impl
+{
+  using type _CCCL_NODEBUG_ALIAS = _Tp;
+};
 template <class _Tp>
-_Tp& __add_lref_fn(int);
-template <class _Tp>
-_Tp __add_lref_fn(...);
+struct __add_lvalue_reference_impl<_Tp, true>
+{
+  using type _CCCL_NODEBUG_ALIAS = _Tp&;
+};
 
 template <class _Tp>
-using add_lvalue_reference_t _CCCL_NODEBUG_ALIAS = decltype(::cuda::std::__add_lref_fn<_Tp>(0));
+using add_lvalue_reference_t _CCCL_NODEBUG_ALIAS = typename __add_lvalue_reference_impl<_Tp>::type;
 
 #endif // !_CCCL_BUILTIN_ADD_LVALUE_REFERENCE
 
