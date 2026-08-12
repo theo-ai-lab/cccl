@@ -41,8 +41,7 @@ using remove_cvref_t _CCCL_NODEBUG_ALIAS = remove_cv_t<remove_reference_t<_Tp>>;
 #endif // defined(_CCCL_BUILTIN_REMOVE_CVREF) && !defined(_LIBCUDACXX_USE_REMOVE_CVREF_FALLBACK)
 
 template <class _Tp, class _Up>
-struct __is_same_uncvref : _IsSame<remove_cvref_t<_Tp>, remove_cvref_t<_Up>>
-{};
+inline constexpr bool __is_same_uncvref_v = is_same_v<remove_cvref_t<_Tp>, remove_cvref_t<_Up>>;
 
 template <class _Tp>
 struct remove_cvref
