@@ -38,7 +38,7 @@ _CCCL_BEGIN_NAMESPACE_CUDA
 
 template <class _Tp>
 _CCCL_CONCEPT __is_complex_compatible_tuple_like = _CCCL_REQUIRES_EXPR(
-  (_Tp))(requires(::cuda::std::tuple_size_v<_Tp> == 2),
+  (_Tp))(requires(::cuda::std::tuple_size<_Tp>::value == 2),
          requires(::cuda::std::is_same_v<::cuda::std::remove_cvref_t<::cuda::std::tuple_element_t<0, _Tp>>,
                                          ::cuda::std::remove_cvref_t<::cuda::std::tuple_element_t<1, _Tp>>>));
 

@@ -80,7 +80,7 @@ template <typename _Range, typename = void>
 inline constexpr bool __has_tuple_size_v = false;
 
 template <typename _Range>
-inline constexpr bool __has_tuple_size_v<_Range, void_t<decltype(tuple_size_v<remove_cvref_t<_Range>>)>> = true;
+inline constexpr bool __has_tuple_size_v<_Range, void_t<decltype(tuple_size<remove_cvref_t<_Range>>::value)>> = true;
 
 template <typename _Range, typename = void>
 inline constexpr bool __has_static_extent_v = false;
