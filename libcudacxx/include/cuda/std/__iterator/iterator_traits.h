@@ -22,6 +22,7 @@
 #endif // no system header
 
 #include <cuda/std/__concepts/arithmetic.h>
+#include <cuda/std/__concepts/can_reference.h>
 #include <cuda/std/__concepts/concept_macros.h>
 #include <cuda/std/__concepts/constructible.h>
 #include <cuda/std/__concepts/convertible_to.h>
@@ -78,12 +79,6 @@ struct __cccl_std_contiguous_iterator_tag_exists : __cccl_type_is_defined<struct
 #include <cuda/std/__cccl/prologue.h>
 
 _CCCL_BEGIN_NAMESPACE_CUDA_STD
-
-template <class _Tp>
-using __with_reference = _Tp&;
-
-template <class _Tp>
-_CCCL_CONCEPT __can_reference = _CCCL_REQUIRES_EXPR((_Tp))(typename(__with_reference<_Tp>));
 
 // [iterator.traits]
 #if _CCCL_HAS_CONCEPTS()

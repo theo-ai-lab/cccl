@@ -20,8 +20,6 @@
 #  pragma system_header
 #endif // no system header
 
-#include <cuda/std/__type_traits/is_referenceable.h>
-
 #include <cuda/std/__cccl/prologue.h>
 
 _CCCL_BEGIN_NAMESPACE_CUDA_STD
@@ -33,19 +31,13 @@ using add_rvalue_reference_t _CCCL_NODEBUG_ALIAS = _CCCL_BUILTIN_ADD_RVALUE_REFE
 
 #else // ^^^ _CCCL_BUILTIN_ADD_RVALUE_REFERENCE ^^^ / vvv !_CCCL_BUILTIN_ADD_RVALUE_REFERENCE vvv
 
-template <class _Tp, bool = __cccl_is_referenceable<_Tp>::value>
-struct __add_rvalue_reference_impl
-{
-  using type _CCCL_NODEBUG_ALIAS = _Tp;
-};
 template <class _Tp>
-struct __add_rvalue_reference_impl<_Tp, true>
-{
-  using type _CCCL_NODEBUG_ALIAS = _Tp&&;
-};
+_Tp&& __add_rref_fn(int);
+template <class _Tp>
+_Tp __add_rref_fn(...);
 
 template <class _Tp>
-using add_rvalue_reference_t _CCCL_NODEBUG_ALIAS = typename __add_rvalue_reference_impl<_Tp>::type;
+using add_rvalue_reference_t _CCCL_NODEBUG_ALIAS = decltype(::cuda::std::__add_rref_fn<_Tp>(0));
 
 #endif // _CCCL_BUILTIN_ADD_RVALUE_REFERENCE
 
