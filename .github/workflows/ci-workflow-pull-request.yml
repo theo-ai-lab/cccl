@@ -46,6 +46,8 @@ jobs:
       bench_matrix: ${{ steps.build-bench-matrix.outputs.bench_matrix }}
       compile_time_enabled: ${{ steps.build-compile-time-matrix.outputs.compile_time_enabled }}
       compile_time_matrix: ${{ steps.build-compile-time-matrix.outputs.compile_time_matrix }}
+      sass_enabled: ${{ steps.build-sass-matrix.outputs.sass_enabled }}
+      sass_matrix: ${{ steps.build-sass-matrix.outputs.sass_matrix }}
       vdc_enabled: ${{ steps.export-flags.outputs.vdc_enabled }}
       docs_enabled: ${{ steps.export-flags.outputs.docs_enabled }}
       rapids_enabled: ${{ steps.export-flags.outputs.rapids_enabled }}
@@ -119,6 +121,61 @@ jobs:
           {
             echo "compile_time_enabled=${compile_time_enabled}"
             echo "compile_time_matrix=${compile_time_matrix_json}"
+          } >> "${GITHUB_OUTPUT}"
+      - name: Build SASS diff dispatch matrix
+        id: build-sass-matrix
+        env:
+          BASE_SHA: ${{ steps.export-pr-info.outputs.base_sha }}
+        run: |
+          if [[ "${{ contains(github.event.head_commit.message, '[skip-sass-diff]') }}" == "true" ]]; then
+            echo "Commit message contains [skip-sass-diff]; skipping SASS diff dispatch."
+            {
+              echo "sass_enabled=false"
+              echo 'sass_matrix={"include":[]}'
+            } >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          # The base SHA comes from the PR lookup, so it is always set here. An
+          # empty value means that lookup changed or broke, and the change set
+          # cannot be computed. Stop, because both alternatives are worse: a
+          # skip hides a real SASS change, and a comparison of everything
+          # reports the wrong reason.
+          if [[ -z "${BASE_SHA}" ]]; then
+            echo "::error::No base SHA; cannot determine whether CUB changed."
+            exit 1
+          fi
+
+          # Only compare SASS when CUB, or something CUB is built from, changed.
+          # `GITHUB_OUTPUT` is unset for this call so that the script's own
+          # FULL_BUILD/LITE_BUILD outputs do not land in this step's outputs, where they
+          # would collide with the ones `build-workflow` writes later.
+
+          echo "::group::Inspect changes for CUB"
+          dirty_report="${RUNNER_TEMP}/sass-inspect-changes.txt"
+          GITHUB_OUTPUT= ./ci/inspect_changes.py \
+            --refs "${BASE_SHA}" "${GITHUB_SHA}" \
+            | tee "${dirty_report}"
+          echo "::endgroup::"
+
+          if ! grep -Eq '^(FULL|LITE)_BUILD=.*\bcub\b' "${dirty_report}"; then
+            echo "CUB is not affected by this change; skipping SASS diff dispatch."
+            {
+              echo "sass_enabled=false"
+              echo 'sass_matrix={"include":[]}'
+            } >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          sass_matrix_json="$(./ci/sass/parse_matrix.py "ci/matrix.yaml" --workflow pull_request)"
+          sass_enabled="$(
+            jq -r 'if (.include // []) == [] then "false" else "true" end' \
+              <<< "${sass_matrix_json}"
+          )"
+
+          {
+            echo "sass_enabled=${sass_enabled}"
+            echo "sass_matrix=${sass_matrix_json}"
           } >> "${GITHUB_OUTPUT}"
       - name: Detect .branch_notes changes
         id: branch-notes-dirt
@@ -481,6 +538,33 @@ jobs:
       artifact_retention_days: ${{ matrix.artifact_retention_days }}
       pr_number: ${{ needs.build-workflow.outputs.pr_number }}
 
+  dispatch-sass-diff:
+    name: SASS Diff (${{ matrix.id }})
+    # The job is intentionally omitted from the aggregate `ci` branch-protection job, so
+    # neither a SASS difference nor a script failure blocks merging a PR.
+    if: >-
+      ${{
+        needs.build-workflow.outputs.sass_enabled == 'true' &&
+        toJSON(fromJSON(needs.build-workflow.outputs.sass_matrix).include) != '[]'
+      }}
+    needs: build-workflow
+    permissions:
+      actions: read
+      id-token: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.build-workflow.outputs.sass_matrix) }}
+    uses: ./.github/workflows/sass-diff.yml
+    with:
+      id: ${{ matrix.id }}
+      gpu: ${{ matrix.gpu }}
+      launch_args: ${{ matrix.launch_args }}
+      preset: ${{ matrix.preset }}
+      archs: ${{ matrix.archs }}
+      target_filters_json: ${{ matrix.target_filters_json }}
+      base_ref: ${{ needs.build-workflow.outputs.base_sha }}
+
   bench-results:
     name: Post benchmark results
     if: >-
@@ -518,6 +602,102 @@ jobs:
             **[Results](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})**
             **[Artifacts](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts)**
           hide_and_recreate: true
+          hide_classify: "OUTDATED"
+
+  sass-results:
+    name: Post SASS comparison results
+    # Runs whenever the comparison was dispatched. `always()` is necessary
+    # because `dispatch-sass-diff` reports a SASS change as a job failure, and
+    # that is exactly the case that must be commented on.
+    if: >-
+      ${{
+        always() && !cancelled() &&
+        needs.build-workflow.outputs.sass_enabled == 'true' &&
+        needs.build-workflow.outputs.pr_number != ''
+      }}
+    needs: [build-workflow, dispatch-sass-diff]
+    permissions:
+      actions: read
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+      # `dispatch-sass-diff` reports a SASS change as a job failure, but it
+      # uploads the summary before it does so. This job therefore reads the
+      # artifact first and only looks at the job result when there is none. A
+      # comparison that broke early writes no artifact at all, so the download
+      # is allowed to find nothing and the step that follows decides whether
+      # that was expected.
+      - name: Download the SASS comment artifact
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: sass-*-comment
+          path: sass-comment
+          merge-multiple: true
+      - name: Compose the comment
+        id: compose
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SASS_RESULT: ${{ needs.dispatch-sass-diff.result }}
+        run: |
+          comment_path="${RUNNER_TEMP}/sass-results-comment.md"
+          sass_comment="sass-comment/summary.md"
+
+          if [[ -s "${sass_comment}" ]]; then
+            cat "${sass_comment}" >> "${GITHUB_STEP_SUMMARY}"
+
+            # A summary exists, thus the comparison ran to the end and the only
+            # reason it can have failed is a SASS change. A run that changed
+            # nothing is reported in the log above and in the job list, so the
+            # PR gets no comment for it.
+            if [[ "${SASS_RESULT}" == "success" ]]; then
+              echo "No SASS change. The PR gets no comment."
+              echo "hide=true" >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
+
+            cp "${sass_comment}" "${comment_path}"
+            echo "path=${comment_path}" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          # A successful comparison always uploads a summary, so its absence
+          # here is a defect in the workflow rather than a failed comparison.
+          if [[ "${SASS_RESULT}" == "success" ]]; then
+            echo "::error::The SASS comparison succeeded but uploaded no summary."
+            exit 1
+          fi
+
+          # The comparison failed before it wrote a report. The check is informational, so
+          # a fault of its own must not add noise to the PR.
+          #
+          # Arguably we could fail loudly here though.
+          #
+          # In any case, comments from an earlier push is hidden, because it no longer
+          # describes the most recent commit.
+          echo "::warning::The SASS comparison ${SASS_RESULT} and produced no report. See ${RUN_URL}."
+          echo "hide=true" >> "${GITHUB_OUTPUT}"
+
+      - name: Comment on PR
+        if: ${{ steps.compose.outputs.path != '' }}
+        uses: marocchino/sticky-pull-request-comment@67d0dec7b07ed060a405f9b2a64b8ab319fdd7db  # v2.9.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          header: sass-results
+          number: ${{ needs.build-workflow.outputs.pr_number }}
+          path: ${{ steps.compose.outputs.path }}
+          hide_and_recreate: true
+          hide_classify: "OUTDATED"
+
+      # An earlier push can have left a comment that no longer applies.
+      - name: Hide a previous PR comment when there is nothing to report
+        if: ${{ steps.compose.outputs.hide == 'true' }}
+        uses: marocchino/sticky-pull-request-comment@67d0dec7b07ed060a405f9b2a64b8ab319fdd7db  # v2.9.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          header: sass-results
+          number: ${{ needs.build-workflow.outputs.pr_number }}
+          hide: true
           hide_classify: "OUTDATED"
 
   # Check all other job statuses. This job gates branch protection checks.
