@@ -10,13 +10,6 @@
 #   0  the SASS is unchanged,
 #   1  the SASS changed. The report was written and printed,
 #   2+ the build or the comparison itself failed.
-#
-# A changed SASS therefore marks the CI job as failed, which makes it visible in
-# the job list. That job is left out of the aggregate `ci` branch-protection
-# job, so a difference never gates a merge.
-#
-# No GPU is necessary. The targets are compiled and disassembled, not run.
-
 set -euo pipefail
 
 usage() {
@@ -250,10 +243,11 @@ done
 # Dump and compare
 # ============================================================================
 
-# `cu++filt` strips the path hash and the pid that nvcc puts in the name of an
-# internal-linkage or anonymous-namespace entity. Both differ between the two
-# worktrees, so without it every such kernel compares as changed.
-# shellcheck disable=SC2329  # Invoked indirectly by `run_command`.
+# `cu++filt` strips the path hash that nvcc puts in the name of an internal-linkage or
+# anonymous-namespace entity. Both differ between the two worktrees, so without it every
+# such kernel compares as changed.
+#
+# shellcheck disable=SC2329 # Invoked indirectly by `run_command`.
 dump_side() {
   local side="$1"
   # `pipefail` again, because `bash -c` starts a fresh shell. Without it a failed

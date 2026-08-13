@@ -4,9 +4,6 @@
 The section selects the build configurations that the SASS comparison uses. The
 configuration is kept in the matrix file, so that it can be trimmed without a
 change to any script.
-
-A malformed entry raises. The traceback names the offending key, and the job
-fails at the matrix step rather than deep inside a CI job, which is the point.
 """
 
 import argparse
@@ -30,7 +27,7 @@ def resolve_ctk(matrix: dict[str, Any], ctk: str) -> str:
     """Resolve a `ctk:` value to the version that `launch.sh --cuda` wants.
 
     `ctk_versions` names the real versions and lists the aliases of each, so
-    `13.X` follows the newest CTK without an edit here.
+    `13.X` follows the newest CTK.
     """
     versions = matrix["ctk_versions"]
     for version, spec in versions.items():
@@ -57,8 +54,8 @@ def matrix_entry(matrix: dict[str, Any], config: dict[str, Any]) -> dict[str, An
         "id": config["id"],
         "gpu": config["gpu"],
         "launch_args": (
-            f"--cuda {resolve_ctk(matrix, config['ctk'])}"
-            f" --host {resolve_cxx(matrix, config['cxx'])}"
+            f"--cuda {resolve_ctk(matrix, config['ctk'])} "
+            f"--host {resolve_cxx(matrix, config['cxx'])} "
         ),
         "preset": config["preset"],
         "archs": config["archs"],
