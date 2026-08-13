@@ -176,22 +176,24 @@ def render(
     )
 
     if changed:
-        headline = (
+        headline = [
             f"⚠️ **The SASS changed for {len(changed)} of "
             f"{len(targets)} CUB benchmark target(s). A benchmark run "
-            "may be necessary**"
-        )
+            "may be necessary**",
+            "",
+            *_render_how_to_benchmark(changed),
+        ]
     else:
-        headline = (
+        headline = [
             f"✅ **No SASS change in any of the {len(targets)} CUB benchmark "
-            "target(s).**"
-        )
+            "target(s).**",
+        ]
 
     lines = [
         "<!-- cccl-sass-diff -->",
         "## 🔬 CUB benchmark SASS comparison",
         "",
-        headline,
+        *headline,
         "",
         "| Run | Value |",
         "| --- | --- |",
@@ -206,7 +208,6 @@ def render(
             [
                 *_render_changed_table(changed),
                 *_render_diffs(changed, artifacts_url),
-                *_render_how_to_benchmark(changed),
                 "",
             ]
         )
