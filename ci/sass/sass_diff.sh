@@ -276,7 +276,7 @@ dump_side() {
   # `cuobjdump` writes an empty dump and still reports success.
   local dump_cmd="set -eou pipefail; cuobjdump -sass -sort '${preset_dir[${side}]}/bin/{}' | cu++filt > '${artifact_dir}/${side}/{}.sass'"
 
-  printf '%s\n' "${targets[@]}" | xargs -P "$(nproc)" -I{} bash -c "${dump_cmd}"
+  printf '%s\n' "${targets[@]}" | xargs --verbose -P "$(nproc)" -I{} bash -c "${dump_cmd}"
 }
 
 for side in base test; do
