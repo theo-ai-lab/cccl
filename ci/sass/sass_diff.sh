@@ -120,7 +120,7 @@ source "${ci_dir}/pretty_printing.sh"
 # ============================================================================
 
 if [[ "${CI:-false}" != 'false' ]]; then
-  run_command "🗜️ Install pytest for CI" python3 -m pip install -U pytest
+  run_command "🗜️  Install pytest for CI" python3 -m pip install -U pytest
 fi
 
 # Before the builds, because a broken script would otherwise be found only after them.
