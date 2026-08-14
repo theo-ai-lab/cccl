@@ -663,7 +663,7 @@ jobs:
           done
 
           cat "${comment_path}" >> "${GITHUB_STEP_SUMMARY}"
-          echo SASS outcome: ${outcome}."
+          echo "SASS outcome: ${outcome}."
           {
             echo "outcome=${outcome}"
             echo "path=${comment_path}"
