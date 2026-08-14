@@ -66,6 +66,14 @@ Compare one family of benchmarks only:
   -target-filter "^cub\\.bench\\.reduce\\."
 ```
 
+Add `-render` to write `result/summary.md` and print it. This is the same
+markdown that CI puts in the PR comment, but the links in it are not usable,
+because a local run has no artifact to link to:
+
+```bash
+./ci/sass/sass_diff.sh "origin/main" "HEAD" -arch "90" -render
+```
+
 Every option that `ci/build_common.sh` accepts is also accepted, so `-cxx`,
 `-std`, `-cuda`, `-cmake-options` and `-configure` work the same way as they do
 for `ci/build_cub.sh`.
@@ -186,8 +194,8 @@ release without an edit here. On CTK 13.3 it expands to
 - `result/report.json`: the per-target and per-architecture comparison result,
 - `result/meta.json`: the refs that were compared and the architectures that the
   build used,
-- `result/summary.md`: the markdown fragment for the PR comment,
-- `meta/selected_targets.txt`: the targets that both sides had.
+- `result/summary.md`: the markdown fragment for the PR comment. Written only
+  with `-render`, or by a call to `render_report.py`.
 
 The four disassembly directories stay on the machine that ran the comparison.
 The CI job excludes them from the artifact, because they are three complete

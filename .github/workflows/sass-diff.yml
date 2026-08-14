@@ -94,11 +94,10 @@ jobs:
           chmod 0600 "${aws_dir}/credentials"
           chmod 0664 "${aws_dir}/config"
 
-      # `sass_diff.sh` exits 1 when the SASS changed. That is a result, not a fault, so
-      # the steps that report it must still run. The status is recorded here and
-      # re-applied by the last step, which marks the job as failed.
+      # A SASS change is a result, not a fault. Thus it does not fail this job. The result
+      # is in result/report.json, and the comment artifact holds a copy for
+      # `sass-results`. That job fails when the SASS changed.
       - name: Compare SASS
-        id: compare
         env:
           AWS_ACCESS_KEY_ID: ${{ env.AWS_ACCESS_KEY_ID }}
           AWS_REGION: ${{ env.AWS_REGION }}
@@ -110,13 +109,8 @@ jobs:
           PRESET: ${{ inputs.preset }}
           TARGET_FILTERS_JSON: ${{ inputs.target_filters_json }}
         run: |
-          # `defaults.run.shell` sets `-u`, so an unset credential stops the job
-          # here instead of reaching `--env` as an empty string. An empty value
-          # gives the build no access to the sccache bucket, and every compile
-          # misses while the job still reports success.
           mkdir -p "${ARTIFACT_ROOT}"
 
-          status=0
           .devcontainer/launch.sh \
             -d ${LAUNCH_ARGS} \
             --env "AWS_ROLE_ARN=" \
@@ -133,25 +127,16 @@ jobs:
             -preset "${PRESET}" \
             -arch "${ARCHS}" \
             -output-dir /sass-artifacts \
-            -target-filters-json "${TARGET_FILTERS_JSON}" || status=$?
-
-          echo "status=${status}" >> "${GITHUB_OUTPUT}"
-
-          # 2 and above is a broken build or a broken comparison. There is no
-          # report to publish, so the entire job stops here.
-          if [[ "${status}" -ge 2 ]]; then
-            echo "::error::The SASS comparison failed with status ${status}."
-            exit "${status}"
-          fi
+            -target-filters-json "${TARGET_FILTERS_JSON}"
 
       # Before the comment is rendered, because the download URL of this artifact is what
       # the comment links to.
       #
-      # Every wanted file is named. The disassembly itself is not among them: `sass_diff.sh`
-      # writes three complete copies of it, under base/, test/, result/base/ and
-      # result/test/. Over 82 benchmark targets and six architectures that reaches several
-      # GB per run, while the files below are a few MB. To read the SASS itself, run
-      # `ci/sass/sass_diff.sh` and open the local artifact directory, which keeps every file.
+      # The disassembly itself is not uploaded, `sass_diff.sh` writes four complete copies
+      # of it, under base/, test/, result/base/ and result/test/. Over 82 benchmark
+      # targets and six architectures that reaches several GB per run, while the files
+      # below are a few MB. To read the SASS itself, run `ci/sass/sass_diff.sh` and open
+      # the local artifact directory, which keeps every file.
       - name: Upload the SASS dumps
         id: dumps
         if: ${{ always() }}
@@ -162,15 +147,11 @@ jobs:
             ${{ env.ARTIFACT_ROOT }}/result/diff
             ${{ env.ARTIFACT_ROOT }}/result/report.json
             ${{ env.ARTIFACT_ROOT }}/result/meta.json
-            ${{ env.ARTIFACT_ROOT }}/result/summary.md
-            ${{ env.ARTIFACT_ROOT }}/meta/selected_targets.txt
           if-no-files-found: error
           retention-days: ${{ inputs.artifact_retention_days }}
 
-      # `sass_diff.sh` already rendered the comment, but without a link: the URL exists
-      # only once the upload above finished. This second render fills it in. Reached
-      # whether or not the SASS changed, and a missing summary here is a defect in this
-      # workflow, because `sass_diff.sh` stops with 2 or more on any real fault.
+      # This step renders the comment. It comes after the upload, because the comment
+      # links to the artifact, and that URL exists only after the upload.
       - name: Report the SASS summary
         env:
           ARTIFACTS_URL: ${{ steps.dumps.outputs.artifact-url }}
@@ -188,23 +169,16 @@ jobs:
           fi
           cat "${summary}" >> "${GITHUB_STEP_SUMMARY}"
 
-      # `sass-results` downloads this by the `sass-*-comment` pattern and
-      # expects `summary.md` at the root, so it stays separate from the dumps.
+      # `sass-results` downloads this artifact with the `sass-*-comment` pattern. It holds
+      # the comment and the report that tells `sass-results` what to do with it. It stays
+      # separate from the dumps, which are large and which no job reads.
       - name: Upload the SASS comment
         uses: actions/upload-artifact@v4
         with:
           name: sass-${{ inputs.id }}-comment
-          path: ${{ env.ARTIFACT_ROOT }}/result/summary.md
-          # The step before this one proved the file is there.
+          path: |
+            ${{ env.ARTIFACT_ROOT }}/result/summary.md
+            ${{ env.ARTIFACT_ROOT }}/result/report.json
+          # The step before this one proved summary.md is there.
           if-no-files-found: error
           retention-days: ${{ inputs.artifact_retention_days }}
-
-      # Last, so that the report and the artifacts are published first. A SASS
-      # change makes this job red in the job list, which is the point: it is the
-      # signal that a benchmark run is needed. `dispatch-sass-diff` is not among
-      # the `needs` of the aggregate `ci` job, so this does not block a merge.
-      - name: Mark the job as failed when the SASS changed
-        if: ${{ steps.compare.outputs.status != '0' }}
-        run: |
-          echo "::error::The SASS changed. See the job summary and the artifacts."
-          exit 1

@@ -20,9 +20,9 @@ constant-bank offsets and the control flow are all compared.
 `cuobjdump -sass` prints every architecture into one stream. Each architecture
 is split out and compared on its own.
 
-Exits 1 when the SASS changed. This makes the CI job fail. That job is not part
-of the aggregate job that branch protection reads, thus a SASS change does not
-prevent a merge.
+This script gives status 1 when the SASS changed. This is for use from a shell.
+CI does not read that status. CI reads `changed` from report.json, because
+`sass_diff.sh` runs with `set -e` and cannot tell status 1 from a failed build.
 """
 
 import argparse
