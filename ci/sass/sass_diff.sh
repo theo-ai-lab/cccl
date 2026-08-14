@@ -119,8 +119,12 @@ source "${ci_dir}/pretty_printing.sh"
 # Test the comparison scripts
 # ============================================================================
 
+if [[ "${CI:-false}" != 'false' ]]; then
+  run_command "🗜️ Install pytest for CI" python3 -m pip install -U pytest
+fi
+
 # Before the builds, because a broken script would otherwise be found only after them.
-run_command "🧪 Test SASS scripts" python3 -m pytest "${script_dir}" -q
+run_command "🧪 Test SASS scripts" python3 -m pytest "${script_dir}"
 
 # ============================================================================
 # Set up both worktrees
